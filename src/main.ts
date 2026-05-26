@@ -4,8 +4,8 @@ import { MapScene } from './scenes/MapScene';
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
   parent: 'game-container',
-  width: 800,
-  height: 600,
+  width: 480,
+  height: 960,
   backgroundColor: '#16213e',
   scale: {
     mode: Phaser.Scale.FIT,
