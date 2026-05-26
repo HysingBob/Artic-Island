@@ -20,40 +20,28 @@ export class MovementScene extends Phaser.Scene {
   private hudText!: Phaser.GameObjects.Text;
   private objects: PlacedObject[] = [];
 
-  // virtual joystick
-  private joyVisible = false;
-  private joyBase!: Phaser.GameObjects.Arc;
-  private joyThumb!: Phaser.GameObjects.Arc;
-  private joyBaseX = 0;
-  private joyBaseY = 0;
-  private joyRadius = 60;
-  private joyDX = 0;
-  private joyDY = 0;
-
   // camera world position
   private camWX = 0;
   private camWY = 0;
 
-  // crosshair dot
-  private crosshair!: Phaser.GameObjects.Arc;
+  // drag-to-pan
+  private dragging = false;
+  private dragStartX = 0;
+  private dragStartY = 0;
+  private dragStartCamX = 0;
+  private dragStartCamY = 0;
 
   constructor() { super({ key: 'MovementScene' }); }
 
   create(): void {
-    const cam = this.cameras.main;
-
     // ── textures ────────────────────────────────────
     this.createBuildingTexture();
 
     // ── placed objects ──────────────────────────────
     this.addPlacedObject(4, 2, 'Kongsbakken vgs.');
 
-    // ── crosshair (fixed center dot) ────────────────
-    this.crosshair = this.add.circle(cam.centerX, cam.centerY, 4, 0xffffff, 0.5);
-    this.crosshair.setStrokeStyle(1, 0x000000, 0.4);
-    this.crosshair.setDepth(100).setScrollFactor(0);
-
     // ── camera ──────────────────────────────────────
+    const cam = this.cameras.main;
     cam.setBounds(-50000, -50000, 100000, 100000);
     cam.scrollX = 0;
     cam.scrollY = 0;
@@ -67,37 +55,31 @@ export class MovementScene extends Phaser.Scene {
       backgroundColor: '#00000088', padding: { x: 6, y: 3 },
     }).setScrollFactor(0).setDepth(100);
 
-    // ── joystick ────────────────────────────────────
-    this.joyBase = this.add.circle(0, 0, this.joyRadius, 0xffffff, 0.12);
-    this.joyBase.setStrokeStyle(2, 0xffffff, 0.25);
-    this.joyBase.setDepth(50).setVisible(false).setScrollFactor(0);
-
-    this.joyThumb = this.add.circle(0, 0, 22, 0xffffff, 0.3);
-    this.joyThumb.setStrokeStyle(2, 0xffffff, 0.5);
-    this.joyThumb.setDepth(51).setVisible(false).setScrollFactor(0);
-
+    // ── touch drag-to-pan ───────────────────────────
     this.setupTouch();
+
+    // ── scroll wheel zoom (desktop) ─────────────────
+    this.input.on('wheel', (_pointer: never, _gos: never, _dx: number, dy: number) => {
+      // placeholder — zoom can come later
+    });
   }
 
   update(_time: number, delta: number): void {
     const dt = delta / 1000;
 
-    // ── pan input ───────────────────────────────────
+    // ── keyboard pan ────────────────────────────────
     let vx = 0, vy = 0;
     if (this.cursors.left.isDown)  vx -= 1;
     if (this.cursors.right.isDown) vx += 1;
     if (this.cursors.up.isDown)    vy -= 1;
     if (this.cursors.down.isDown)  vy += 1;
 
-    if (this.joyVisible) { vx = this.joyDX; vy = this.joyDY; }
-
     if (vx !== 0 || vy !== 0) {
       const len = Math.sqrt(vx * vx + vy * vy);
       if (len > 1) { vx /= len; vy /= len; }
+      this.camWX += vx * PAN_SPEED * dt;
+      this.camWY += vy * PAN_SPEED * dt;
     }
-
-    this.camWX += vx * PAN_SPEED * dt;
-    this.camWY += vy * PAN_SPEED * dt;
 
     // ── move camera ─────────────────────────────────
     const cam = this.cameras.main;
@@ -107,16 +89,13 @@ export class MovementScene extends Phaser.Scene {
     // ── draw grid ────────────────────────────────────
     this.drawGrid();
 
-    // ── update crosshair position in world ───────────
-    // crosshair is fixed to screen center, which world-pos is camWX,camWY
-
     // ── HUD ──────────────────────────────────────────
     const col = Math.floor(this.camWX / TILE);
     const row = Math.floor(this.camWY / TILE);
     this.hudText.setText([
       `pos  (${Math.round(this.camWX)}, ${Math.round(this.camWY)})`,
       `tile (${col}, ${row})`,
-      `${this.joyVisible ? '(touch)' : '(keyboard)'}`,
+      this.dragging ? '(dragging)' : '(keyboard)',
     ].join('\n'));
   }
 
@@ -127,7 +106,6 @@ export class MovementScene extends Phaser.Scene {
     const canvas = this.textures.createCanvas('kongsbakken', W, H)!;
     const ctx = canvas.getContext();
 
-    // roof
     ctx.fillStyle = '#4a3a3a';
     ctx.beginPath();
     ctx.moveTo(W / 2, 1);
@@ -136,41 +114,33 @@ export class MovementScene extends Phaser.Scene {
     ctx.closePath();
     ctx.fill();
 
-    // facade
     ctx.fillStyle = '#8b4a3a';
     ctx.fillRect(2, 8, W - 4, 20);
 
-    // horizontal bands
     ctx.fillStyle = '#6b3a2a';
     ctx.fillRect(2, 16, W - 4, 2);
     ctx.fillRect(2, 24, W - 4, 1);
 
-    // windows
     ctx.fillStyle = '#ffecb3';
-    const cols = [6, 13, 20];
-    const rows = [10, 18];
-    for (const r of rows) {
-      for (const c of cols) {
+    [6, 13, 20].forEach(c => {
+      [10, 18].forEach(r => {
         ctx.fillRect(c, r, 4, 4);
         ctx.strokeStyle = '#5d3a2a';
         ctx.lineWidth = 1;
         ctx.strokeRect(c, r, 4, 4);
-      }
-    }
+      });
+    });
 
-    // door
     ctx.fillStyle = '#4a3020';
     ctx.fillRect(13, 22, 6, 6);
     ctx.strokeStyle = '#3a2010';
     ctx.strokeRect(13, 22, 6, 6);
 
-    // knob
     ctx.fillStyle = '#d4a84b';
     ctx.beginPath();
     ctx.arc(17.5, 25, 0.8, 0, Math.PI * 2);
     ctx.fill();
 
-    // base
     ctx.fillStyle = '#5a4a3a';
     ctx.fillRect(1, 28, W - 2, 2);
 
@@ -188,13 +158,12 @@ export class MovementScene extends Phaser.Scene {
     sprite.setScale(1.5);
     sprite.setDepth(5);
 
-    const label = this.add.text(wx, wy - 28, name, {
+    this.add.text(wx, wy - 28, name, {
       fontFamily: 'monospace', fontSize: '10px', color: '#ffffff',
       backgroundColor: '#00000066', padding: { x: 4, y: 2 },
     }).setOrigin(0.5).setDepth(6);
 
-    // labels always visible now (no player proximity check needed)
-    this.objects.push({ tileX, tileY, name, sprite, label });
+    this.objects.push({ tileX, tileY, name, sprite, label: null! });
   }
 
   // ── grid ────────────────────────────────────────────
@@ -230,37 +199,28 @@ export class MovementScene extends Phaser.Scene {
     this.gridGfx = g;
   }
 
-  // ── joystick ────────────────────────────────────────
+  // ── drag-to-pan (anywhere on screen) ────────────────
 
   private setupTouch(): void {
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
-      const W = this.cameras.main.width, H = this.cameras.main.height;
-      if (p.x < W * 0.5 && p.y > H * 0.4) {
-        this.joyBaseX = p.x; this.joyBaseY = p.y;
-        this.joyBase.setPosition(p.x, p.y).setVisible(true);
-        this.joyThumb.setPosition(p.x, p.y).setVisible(true);
-        this.joyVisible = true;
-      }
+      this.dragging = true;
+      this.dragStartX = p.x;
+      this.dragStartY = p.y;
+      this.dragStartCamX = this.camWX;
+      this.dragStartCamY = this.camWY;
     });
+
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
-      if (!this.joyVisible || !p.isDown) return;
-      const dx = p.x - this.joyBaseX, dy = p.y - this.joyBaseY;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      const clampR = Math.min(dist, this.joyRadius);
-      const angle = Math.atan2(dy, dx);
-      this.joyThumb.setPosition(
-        this.joyBaseX + Math.cos(angle) * clampR,
-        this.joyBaseY + Math.sin(angle) * clampR,
-      );
-      if (dist > 8) {
-        const s = Math.min(dist / this.joyRadius, 1);
-        this.joyDX = Math.cos(angle) * s;
-        this.joyDY = Math.sin(angle) * s;
-      } else { this.joyDX = 0; this.joyDY = 0; }
+      if (!this.dragging || !p.isDown) return;
+      const dx = p.x - this.dragStartX;
+      const dy = p.y - this.dragStartY;
+      // invert: dragging finger right → map moves right (camera moves left)
+      this.camWX = this.dragStartCamX - dx;
+      this.camWY = this.dragStartCamY - dy;
     });
+
     this.input.on('pointerup', () => {
-      this.joyVisible = false; this.joyDX = 0; this.joyDY = 0;
-      this.joyBase.setVisible(false); this.joyThumb.setVisible(false);
+      this.dragging = false;
     });
   }
 }
