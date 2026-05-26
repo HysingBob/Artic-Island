@@ -120,52 +120,61 @@ export class MovementScene extends Phaser.Scene {
     ].join('\n'));
   }
 
-  // ── building texture ────────────────────────────────
+  // ── building texture (via canvas, never on display list) ──
 
   private createBuildingTexture(): void {
     const W = 32, H = 32;
-    const g = this.add.graphics();
+    const canvas = this.textures.createCanvas('kongsbakken', W, H)!;
+    const ctx = canvas.getContext();
 
     // roof
-    g.fillStyle(0x4a3a3a, 1);
-    g.fillTriangle(W / 2, 1, 1, 8, W - 1, 8);
+    ctx.fillStyle = '#4a3a3a';
+    ctx.beginPath();
+    ctx.moveTo(W / 2, 1);
+    ctx.lineTo(1, 8);
+    ctx.lineTo(W - 1, 8);
+    ctx.closePath();
+    ctx.fill();
 
     // facade
-    g.fillStyle(0x8b4a3a, 1);
-    g.fillRect(2, 8, W - 4, 20);
+    ctx.fillStyle = '#8b4a3a';
+    ctx.fillRect(2, 8, W - 4, 20);
 
     // horizontal bands
-    g.fillStyle(0x6b3a2a, 1);
-    g.fillRect(2, 16, W - 4, 2);
-    g.fillRect(2, 24, W - 4, 1);
+    ctx.fillStyle = '#6b3a2a';
+    ctx.fillRect(2, 16, W - 4, 2);
+    ctx.fillRect(2, 24, W - 4, 1);
 
     // windows
-    const winW = 4, winH = 4;
+    ctx.fillStyle = '#ffecb3';
     const cols = [6, 13, 20];
     const rows = [10, 18];
-    g.fillStyle(0xffecb3, 0.9);
     for (const r of rows) {
       for (const c of cols) {
-        g.fillRect(c, r, winW, winH);
-        g.lineStyle(1, 0x5d3a2a, 0.8);
-        g.strokeRect(c, r, winW, winH);
+        ctx.fillRect(c, r, 4, 4);
+        ctx.strokeStyle = '#5d3a2a';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(c, r, 4, 4);
       }
     }
 
     // door
-    g.fillStyle(0x4a3020, 1);
-    g.fillRect(13, 22, 6, 6);
-    g.lineStyle(1, 0x3a2010, 1);
-    g.strokeRect(13, 22, 6, 6);
-    g.fillStyle(0xd4a84b, 1);
-    g.fillCircle(17.5, 25, 0.8);
+    ctx.fillStyle = '#4a3020';
+    ctx.fillRect(13, 22, 6, 6);
+    ctx.strokeStyle = '#3a2010';
+    ctx.strokeRect(13, 22, 6, 6);
+
+    // knob
+    ctx.fillStyle = '#d4a84b';
+    ctx.beginPath();
+    ctx.arc(17.5, 25, 0.8, 0, Math.PI * 2);
+    ctx.fill();
 
     // base
-    g.fillStyle(0x5a4a3a, 1);
-    g.fillRect(1, 28, W - 2, 2);
+    ctx.fillStyle = '#5a4a3a';
+    ctx.fillRect(1, 28, W - 2, 2);
 
-    g.generateTexture('kongsbakken', W, H);
-    g.destroy();
+    canvas.refresh();
   }
 
   // ── placed objects ──────────────────────────────────
